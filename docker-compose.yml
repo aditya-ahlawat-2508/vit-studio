@@ -1,0 +1,25 @@
+services:
+  studio:
+    build:
+      context: .
+      target: runtime
+    image: vit-studio
+    container_name: vit-studio
+    ports:
+      # Loopback only: the Studio has no auth, so don't expose it to the network.
+      - "127.0.0.1:8765:8765"
+    volumes:
+      # The demo git repo + imported media survive container restarts.
+      - vit-workspace:/data
+    environment:
+      # Add host names here (comma-separated) if you reach the Studio by another name.
+      VIT_ALLOWED_HOSTS: ""
+    env_file:
+      # Optional: GEMINI_API_KEY for AI-assisted merge suggestions. Create a
+      # .env file at the repo root (gitignored) — never commit real keys here.
+      - path: .env
+        required: false
+    restart: unless-stopped
+
+volumes:
+  vit-workspace:

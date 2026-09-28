@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vit Studio</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo">vit</span><span class="brand-sub">git for video editing</span></div>
+  <div class="topbar-mid">
+    <span class="branch-pill" id="branchPill" title="Current branch">main</span>
+    <span class="dirty-pill" id="dirtyPill" hidden>unsaved changes</span>
+  </div>
+  <div class="topbar-right">
+    <label class="who">You are
+      <input id="authorInput" type="text" placeholder="Your name" autocomplete="off">
+    </label>
+    <button class="ghost" id="resetBtn" title="Delete the demo repo and start over">Reset demo</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- Left: media + inspector -->
+  <aside class="col left">
+    <section class="panel bin">
+      <div class="panel-head">
+        <h2>Media</h2>
+        <label class="btn small" title="Import a video file from your computer">
+          Import video<input type="file" id="importInput" accept="video/*" hidden>
+        </label>
+      </div>
+      <p class="hint">Drag onto the timeline, or double-click to add at the playhead. Media never enters git — only references to its frames do.</p>
+      <div class="bin-list" id="binList"></div>
+    </section>
+    <section class="panel inspector">
+      <div class="panel-head"><h2>Inspector</h2></div>
+      <div id="inspector" class="inspector-body"></div>
+    </section>
+  </aside>
+
+  <!-- Center: viewer + timeline -->
+  <section class="col center">
+    <div class="center-tabs">
+      <button class="tab active" data-view="viewer">Viewer</button>
+      <button class="tab" data-view="json">JSON on disk</button>
+    </div>
+    <div class="viewer-wrap" id="viewerWrap">
+      <div class="preview-banner" id="previewBanner" hidden>
+        <span id="previewLabel"></span>
+        <span class="spacer"></span>
+        <button class="small" id="previewRestore">Restore this version</button>
+        <button class="small ghost" id="previewExit">Back to working copy</button>
+      </div>
+      <div class="viewer">
+        <canvas id="viewerCanvas" width="960" height="540"></canvas>
+      </div>
+      <div class="frame-map" id="frameMap"></div>
+    </div>
+    <div class="json-wrap" id="jsonWrap" hidden>
+      <div class="json-files" id="jsonFiles"></div>
+      <div class="json-panes">
+        <div class="json-pane"><h3>File contents</h3><pre id="jsonContent"></pre></div>
+        <div class="json-pane"><h3>git diff vs. last saved version</h3><pre id="jsonDiff" class="rawdiff"></pre></div>
+      </div>
+    </div>
+
+    <div class="transport">
+      <button id="playBtn" class="icon" title="Play / pause (Space)">▶</button>
+      <span class="tc" id="timecode">00:00:00:00</span>
+      <span class="muted" id="frameNo">frame 0</span>
+      <span class="spacer"></span>
+      <button class="small ghost" id="splitBtn" title="Split selected clip at playhead (S)">Split</button>
+      <button class="small ghost" id="markerBtn" title="Add marker at playhead (M)">+ Marker</button>
+      <label class="muted small-label"><input type="checkbox" id="burnIn" checked> source-frame burn-in</label>
+      <label class="muted small-label">Zoom <input type="range" id="zoomRange" min="0.5" max="12" step="0.25" value="2"></label>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="tl-labels" id="tlLabels"></div>
+      <div class="tl-scroll" id="tlScroll">
+        <div class="tl-content" id="tlContent"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right: version control -->
+  <aside class="col right">
+    <section class="panel vc">
+      <div class="panel-head"><h2>Branches</h2></div>
+      <div class="branch-row">
+        <select id="branchSelect" title="Switch branch"></select>
+        <button class="small" id="newBranchBtn">New branch</button>
+        <button class="small accent" id="mergeBtn">Merge…</button>
+      </div>
+      <form class="new-branch" id="newBranchForm" hidden>
+        <input id="newBranchName" placeholder="e.g. priya-color" autocomplete="off">
+        <button class="small accent" type="submit">Create</button>
+        <button class="small ghost" type="button" id="newBranchCancel">Cancel</button>
+      </form>
+    </section>
+
+    <section class="panel changes">
+      <div class="panel-head"><h2>Unsaved changes</h2><span class="muted small-label" id="changesCount"></span></div>
+      <div class="diff" id="diffView"></div>
+      <div class="issues" id="issuesView"></div>
+      <form class="commit-box" id="commitForm">
+        <input id="commitMsg" placeholder="Describe this version…" autocomplete="off">
+        <button class="accent" type="submit" id="commitBtn">Save version</button>
+      </form>
+    </section>
+
+    <section class="panel history">
+      <div class="panel-head"><h2>History</h2><span class="muted small-label">click a version to inspect</span></div>
+      <div class="graph" id="graph"></div>
+    </section>
+  </aside>
+</main>
+
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head"><h2 id="modalTitle"></h2><button class="icon ghost" id="modalClose" aria-label="Close">✕</button></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<!-- Classic scripts sharing one global scope; order matters (main.js wires events and boots). -->
+<script src="/js/sources.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/model.js"></script>
+<script src="/js/sync.js"></script>
+<script src="/js/clip-ops.js"></script>
+<script src="/js/viewer.js"></script>
+<script src="/js/timeline.js"></script>
+<script src="/js/media-bin.js"></script>
+<script src="/js/inspector.js"></script>
+<script src="/js/version-control.js"></script>
+<script src="/js/modal.js"></script>
+<script src="/js/merge.js"></script>
+<script src="/js/json-view.js"></script>
+<script src="/js/main.js"></script>
+</body>
+</html>
