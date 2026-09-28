@@ -39,9 +39,13 @@ USER vit
 VOLUME ["/data"]
 EXPOSE 8765
 
+# $PORT is honored by demo/server.py (falls back to 8765) so the same image
+# works unchanged both locally (docker-compose, no $PORT set) and on a PaaS
+# that injects its own port and routes to it (Render, Railway, Heroku, ...).
+ENV PORT=8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/state', timeout=4)"
+    CMD python -c 'import os, urllib.request; urllib.request.urlopen("http://127.0.0.1:%s/api/state" % os.environ["PORT"], timeout=4)'
 
 # Bind all interfaces inside the container; docker-compose publishes the port
-# on the host's loopback only.
-CMD ["python", "demo/server.py", "--host", "0.0.0.0", "--port", "8765", "--no-browser"]
+# on the host's loopback only. --port is intentionally omitted so $PORT wins.
+CMD ["python", "demo/server.py", "--host", "0.0.0.0", "--no-browser"]

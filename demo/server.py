@@ -22,7 +22,10 @@ from studio.config import DEFAULT_BIND, DEFAULT_PORT  # noqa: E402
 
 def main():
     parser = argparse.ArgumentParser(description="Vit Studio")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    # Most PaaS platforms (Render, Railway, Heroku, ...) inject $PORT and route
+    # to whatever port the container actually listens on — respecting it here
+    # means the same image deploys correctly without per-platform config.
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", DEFAULT_PORT)))
     parser.add_argument("--host", default=DEFAULT_BIND,
                         help="address to bind (0.0.0.0 inside Docker; the default keeps it local)")
     parser.add_argument("--no-browser", action="store_true")
