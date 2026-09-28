@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vit-studio-demo
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/state
+    envVars:
+      - key: VIT_ALLOWED_HOSTS
+        value: ""
+      # Optional: enables AI-assisted merge pre-triage (vit/merge/suggest.py).
+      # Set the real value in the Render dashboard, never in this file.
+      - key: GEMINI_API_KEY
+        sync: false
