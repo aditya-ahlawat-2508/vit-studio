@@ -107,8 +107,10 @@ function newId(prefix, name) {
 
 function edit(fn) {
   if (readonly()) { toast("You're previewing an old version — go back to the working copy to edit."); return false; }
+  const before = window.onLiveEdit ? clone(S.files) : null;
   fn();
   sortAll();
+  if (before) window.onLiveEdit(before, S.files); // live co-editing (live.js) — additive, no-op if not connected
   render();
   scheduleSync();
   return true;

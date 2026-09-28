@@ -8,6 +8,8 @@ services:
     ports:
       # Loopback only: the Studio has no auth, so don't expose it to the network.
       - "127.0.0.1:8765:8765"
+      # Live co-editing's WebSocket relay — see docs/ARCHITECTURE.md.
+      - "127.0.0.1:8766:8766"
     volumes:
       # The demo git repo + imported media survive container restarts.
       - vit-workspace:/data

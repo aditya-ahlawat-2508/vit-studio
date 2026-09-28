@@ -130,6 +130,24 @@ by step with diagrams.
   no auth needed for a `127.0.0.1`-only tool)
 - Per-project request locking (keyed by project path, not one global lock)
 
+**Live co-editing (pre-commit)**
+- Multiple browser tabs on the same project stay in sync in real time,
+  before anyone explicitly saves — a small purpose-built CRDT
+  (`vit/live/crdt.py`), not Yjs, transported over a plain WebSocket relay
+  (`demo/studio/live_server.py`)
+- Deterministic convergence: concurrent edits to the same field always
+  resolve to the same value on every connected client, proven by real
+  multi-client tests (Python `websockets` clients against the actual server,
+  plus a Node-run mirror of the exact frontend logic — see
+  `tests/test_live_crdt.py`, `tests/test_live_integration.py`,
+  `tests/live/test_live_crdt.node.js`)
+- An explicit save still produces one normal git commit through the exact
+  same `TimelineStore`/`VitProject` path a single editor uses — branching,
+  merging and history are completely unaffected
+- Runs on a second port (plain `http.server` can't speak WebSocket on the
+  same one); only reachable where that port is actually exposed — see
+  docs/ARCHITECTURE.md for the single-public-port PaaS caveat
+
 ---
 
 ## Quickstart
@@ -142,13 +160,16 @@ docker compose up --build
 
 **Local:**
 ```bash
+pip install -r requirements.txt   # websockets, for live co-editing
 python3 demo/server.py            # → http://localhost:8765
+#                                    live co-editing WS on :8766 (--no-live to skip)
 ```
 
 **Tests:**
 ```bash
-pip install pytest
-python3 -m pytest tests/ -q
+pip install -r requirements.txt pytest
+python3 -m pytest tests/ -q          # Python: merge algorithm, git integration, live CRDT + WS integration
+node --test tests/live/*.node.js     # JS: same CRDT convergence proofs, run against the real frontend file
 ```
 
 **Optional: AI-assisted merge suggestions.** Create a `.env` file at the repo
@@ -176,13 +197,22 @@ vit/                    the library — pure Python, no I/O beyond git/disk
     three_way.py              id-keyed field merge, track merge, keep-both ripple
     service.py                 merge orchestration (git + three_way + overlap detection)
     suggest.py                 pre-triage: heuristics + optional Gemini batch call
+  live/
+    crdt.py                    the live co-editing CRDT (Lamport-clock LWW)
+    session.py                  one CRDTDoc per project + the save integration point
+    registry.py                  project path -> LiveSession, process-lifetime
 
 demo/                    Vit Studio — a browser NLE built on top of vit
-  server.py                entry point
-  studio/                  Python backend (HTTP API, workspace, media library)
+  server.py                entry point (HTTP + live WebSocket server)
+  studio/                  Python backend (HTTP API, workspace, media library,
+                            live_server.py — the WebSocket relay)
   static/                  vanilla JS/CSS frontend, no build step
+    js/live.js               dual-mode: pure CRDT logic (Node-testable) +
+                              browser WebSocket wiring
 
 tests/                   pytest suite (backend), one file per module
+  live/                    Node-run mirror of the live-CRDT convergence tests,
+                           against the actual frontend file — no browser needed
 docs/
   ARCHITECTURE.md          full design writeup with diagrams
   JSON_SCHEMAS.md          on-disk schema reference

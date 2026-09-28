@@ -315,7 +315,124 @@ requests to the same project's git working tree never race, but (once
 multi-project routing exists) different projects never block each other
 either, including a slow multi-branch `/api/branches/status` call.
 
-## 6. Testing strategy
+## 6. Live co-editing: a small CRDT instead of a heavy dependency
+
+Everything in §1–§5 concerns *committed history* — branches, merges,
+conflicts. Live co-editing is a different problem: two browser tabs looking
+at the *same uncommitted timeline* at the same moment, before anyone has
+saved anything. It's an additive layer (`vit/live/`) that never touches
+`vit/merge/`, `vit/git.py`, or `vit/diff.py` — its only contact with the rest
+of the library is writing through `TimelineStore.write_files()` and
+`VitProject.commit_if_changed()` on an explicit save, exactly like a single
+editor's save works today.
+
+### Why not Yjs
+
+The obvious choice for browser CRDT sync is Yjs, via a Python binding
+(`y-py`/`pycrdt`). Both are Rust-backed with no prebuilt wheel for every
+platform this project might build on, and neither was installed here — pulling
+one in would mean a compiler-dependent build step for a demo project with no
+dependency manifest to begin with. Since this project already controls both
+ends of the wire (a Python backend, a build-step-free vanilla-JS frontend),
+it doesn't need a general-purpose CRDT library — it needs *one* correctly
+implemented CRDT for *one* known document shape, which is a much smaller,
+fully auditable problem.
+
+### The CRDT: Lamport-clock LWW-registers over vit's own normalized shape
+
+`vit/live/crdt.py` flattens the same normalized representation
+`vit.merge.three_way._normalize_domain` already produces (clips/tracks keyed
+by stable id, not array position) into independent cells, each holding
+`(value, timestamp)`. A cell is a plain **LWW-Register** — `merge(a, b) = a
+if a.timestamp >= b.timestamp else b` — which is commutative, associative
+and idempotent, the three properties a CRDT needs. The whole document is the
+product of these cells, merged independently; a product of CRDTs is a CRDT.
+
+```mermaid
+flowchart LR
+    Files["Working-tree files<br/>(same shape as any commit)"] -->|_normalize_domain,<br/>reused from vit/merge/| Norm["Normalized tree<br/>(clips/tracks keyed by id)"]
+    Norm -->|flatten| Cells["Cells: {path: (value, timestamp)}<br/>timestamp = (Lamport counter, client_id)"]
+    Cells -->|snapshot: denormalize| Out["Plain domain files,<br/>ready for TimelineStore.write_files"]
+```
+
+Timestamps are **Lamport clocks**, not wall-clock: a local edit increments
+the local counter; a received remote update advances the local counter to
+`max(local, remote)`. Ordering only depends on causality, never on clock
+skew between two laptops. `client_id` breaks ties on equal counters.
+Deletion is **delete-wins**: removing an item writes a dedicated `__exists__`
+tombstone cell (LWW like everything else), and a snapshot excludes anything
+under a tombstone regardless of a field edit with an even later timestamp
+that never saw the delete — a deliberate, documented simplification, not the
+only possible policy.
+
+```mermaid
+sequenceDiagram
+    participant TabA as Browser tab A
+    participant Relay as live_server.py (WS relay)
+    participant Session as LiveSession (server-authoritative CRDTDoc)
+    participant TabB as Browser tab B
+
+    TabA->>Relay: connect
+    Relay->>Session: get_or_create(project)
+    Session-->>TabA: {type: snapshot, files}
+    TabB->>Relay: connect
+    Session-->>TabB: {type: snapshot, files}  (same state — both start in sync)
+
+    TabA->>Relay: {type: update, path, value, timestamp:[1,"alice"]}
+    Relay->>Session: apply_remote_update()
+    Session-->>Relay: changed = true
+    Relay-->>TabB: relay the same update (never echoed back to A)
+    TabB->>TabB: apply_remote() — LWW merge into its own local CRDTDoc,<br/>then re-render from the merged snapshot
+```
+
+Each browser tab keeps its **own** replica of the CRDT (mirrored in
+`demo/static/js/live.js`, field-for-field identical algorithm to the Python
+side) rather than blindly trusting every relayed message — the server relays
+messages that changed *its* state, but each client still runs the same LWW
+comparison on receipt, so a client's own optimistic local edit that actually
+lost to a genuinely concurrent edit gets corrected the same way every other
+client converges.
+
+### Verifying convergence without a browser
+
+CRDT convergence is a property of data, not of pixels — it doesn't need a
+browser to prove. Three layers of real (non-mocked) verification exist:
+
+1. **`tests/test_live_crdt.py`** — pure Python, no I/O: feeds the same set of
+   concurrent updates to independent `CRDTDoc` instances in every possible
+   delivery order and asserts they all converge to one identical state.
+2. **`tests/test_live_integration.py`** — starts the *actual*
+   `demo/studio/live_server.py` code as a real asyncio server, opens real
+   `websockets` client connections (simulating browser tabs), and proves
+   convergence over an actual socket, then proves an explicit save produces
+   a real git commit.
+3. **`tests/live/test_live_crdt.node.js`** — the same convergence proofs as
+   (1), run with Node's built-in test runner directly against the *shipped*
+   `demo/static/js/live.js` file (it's dual-mode: pure data functions
+   `require()`-able from Node, browser wiring guarded separately) — proving
+   the frontend implementation, not just a description of it, actually
+   converges too.
+
+What none of this proves: that clicking two things in two real browser tabs
+looks right on screen. No browser tool was available while building this —
+the DOM-level rendering path (`applyRemoteSnapshot` → `render()` in
+`live.js`) is wired following the exact same call already used for every
+other state change, but hasn't been visually confirmed.
+
+### A real deployment constraint
+
+The relay runs on a **second port** (`demo/studio/live_server.py`), because
+plain `http.server` — what the rest of the Studio runs on — can't speak
+WebSocket on the same port. `docker-compose.yml` publishes both `8765` and
+`8766`, so this works locally and in Docker. It will **not** work unmodified
+on a PaaS that only forwards a single public port to a container (Render's
+free tier, notably) — the WebSocket port would be unreachable from outside
+even though the main HTTP port works fine. Fixing that for real means either
+running everything through an ASGI server that can multiplex both HTTP and
+WebSocket on one port, or a reverse proxy in front that does — out of scope
+for what's built here, and flagged rather than silently left to fail.
+
+## 7. Testing strategy
 
 The merge algorithm, diff formatting, and validation rules are pure
 functions over plain dicts — tested directly with no git repo, no HTTP
@@ -327,4 +444,5 @@ git-integration boundary itself (real commits, real branches, real
 `merge-tree` conflict detection) matches what the pure-function tests
 already established. `tests/test_studio.py` and
 `tests/test_studio_handler_locking.py` cover the HTTP/workspace layer on
-top of that. See `docs/JSON_SCHEMAS.md` for the on-disk schema reference.
+top of that. Live co-editing has its own three-layer verification described
+in §6. See `docs/JSON_SCHEMAS.md` for the on-disk schema reference.

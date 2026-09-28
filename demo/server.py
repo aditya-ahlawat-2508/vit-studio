@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from studio import StudioConfig, build_studio  # noqa: E402
 from studio.config import DEFAULT_BIND, DEFAULT_PORT  # noqa: E402
+from studio import live_server  # noqa: E402
 
 
 def main():
@@ -30,6 +31,8 @@ def main():
                         help="address to bind (0.0.0.0 inside Docker; the default keeps it local)")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--reset", action="store_true", help="start from a fresh demo project")
+    parser.add_argument("--no-live", action="store_true",
+                        help="skip the live co-editing WebSocket server")
     args = parser.parse_args()
 
     studio = build_studio(StudioConfig.from_env())
@@ -41,6 +44,17 @@ def main():
     server = studio.make_server(args.port, args.host)
     print(f"\n  Vit Studio running at {url}")
     print(f"  Project repo (plain git + JSON): {studio.config.project_dir}")
+
+    if not args.no_live:
+        # Separate port: plain http.server (the main server above) can't speak
+        # WebSocket. On a PaaS that only forwards one public port (Render's
+        # free tier, for one) this port won't be externally reachable — live
+        # co-editing then only works locally / in Docker with both ports
+        # exposed. See docs/ARCHITECTURE.md.
+        live_port = int(os.environ.get("VIT_LIVE_PORT", args.port + 1))
+        live_server.start_in_background(studio.config.project_dir, args.host, live_port)
+        print(f"  Live co-editing (WebSocket): ws://localhost:{live_port}")
+
     print("  Ctrl+C to stop.\n")
     if not args.no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()

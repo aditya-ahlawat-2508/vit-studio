@@ -1,0 +1,6 @@
+# Runtime dependency for vit/live/ + demo/studio/live_server.py (live
+# co-editing). websockets ships prebuilt wheels for every common platform —
+# no compiler needed, unlike CRDT bindings like y_py/pycrdt, which is exactly
+# why this project implements its own small CRDT (vit/live/crdt.py) instead
+# of depending on one of those.
+websockets>=13,<18

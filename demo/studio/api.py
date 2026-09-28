@@ -5,10 +5,12 @@ ValueError / GitError / KeyError becomes a 400 with the message. Transport
 concerns (HTTP, security, locking) live in `handler.py`.
 """
 
+import os
 import re
 from typing import Callable, Dict, Optional
 
 from vit.diff import format_diff
+from vit.live import registry as live_registry
 from vit.merge import CONFLICTS, UP_TO_DATE, perform_merge, preview_merge
 from vit.merge.suggest import suggest_resolutions
 from vit.timeline import DOMAIN_FILES
@@ -44,6 +46,7 @@ class StudioApi:
             "/api/merge": self.merge,
             "/api/restore": self.restore,
             "/api/reset": self.reset,
+            "/api/live/save": self.live_save,
         }
 
     # ── Reads ────────────────────────────────────────────────────────────────
@@ -62,6 +65,12 @@ class StudioApi:
             "diff": self.ws.unsaved_diff(),
             "issues": self.ws.issues(),
             "project_dir": self.ws.project.path,
+            # Live co-editing (vit/live/) runs its own WebSocket server on a
+            # separate port, since plain http.server can't speak WebSocket.
+            # Same host as this HTTP request, different port — see
+            # docs/ARCHITECTURE.md for why this is a single-port limitation
+            # on PaaS platforms that only forward one public port.
+            "live_ws_port": int(os.environ.get("VIT_LIVE_PORT", 8766)),
         }
 
     def log(self, _q, _body) -> dict:
@@ -185,6 +194,18 @@ class StudioApi:
     def reset(self, _q, _body) -> dict:
         self.ws.reset()
         return {"ok": True}
+
+    def live_save(self, _q, body) -> dict:
+        """Explicit save from the live co-editing layer: flushes the shared
+        CRDT state (vit/live/) to disk and commits it exactly as a single
+        editor's /api/commit does — same TimelineStore/VitProject path, same
+        JSON formatting, a completely ordinary vit commit either way."""
+        message = (body.get("message") or "").strip() or "live save"
+        if not message.startswith("vit:"):
+            message = f"vit: {message}"
+        self.ws.set_author(body.get("author"))
+        session = live_registry.get_or_create(self.ws.project)
+        return {"hash": session.flush_to_disk_and_commit(message), "message": message}
 
     def _files_at(self, ref: Optional[str]) -> dict:
         """Every domain at `ref`, with {} for domains that don't exist there (what the editor expects)."""

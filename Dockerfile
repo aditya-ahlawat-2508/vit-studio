@@ -17,6 +17,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     VIT_DEMO_WORKSPACE=/data
 
 WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY vit/ vit/
 COPY demo/ demo/
 
@@ -38,6 +40,12 @@ USER vit
 
 VOLUME ["/data"]
 EXPOSE 8765
+# Live co-editing's WebSocket relay (vit/live/, demo/studio/live_server.py) —
+# a second port, since plain http.server can't speak WebSocket on the same
+# port. Only reachable on platforms that forward more than one public port
+# (docker-compose does; most single-port PaaS free tiers, e.g. Render, don't —
+# see docs/ARCHITECTURE.md).
+EXPOSE 8766
 
 # $PORT is honored by demo/server.py (falls back to 8765) so the same image
 # works unchanged both locally (docker-compose, no $PORT set) and on a PaaS

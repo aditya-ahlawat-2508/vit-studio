@@ -2,6 +2,8 @@
 
 // ── Loading + top-level render ─────────────────────────────────────────────
 
+let liveConnected = false;
+
 async function loadAll() {
   const st = await api("/api/state");
   Object.assign(S, {
@@ -14,6 +16,15 @@ async function loadAll() {
   render();
   await loadLog();
   if (S.view === "json") loadJson();
+  // Live co-editing: connect once. A snapshot arrives immediately on connect
+  // and becomes the new source of truth for S.files, same as any other
+  // connected tab's — see live.js. Skipped entirely if live.js isn't loaded
+  // (e.g. a page that only wants the single-editor flow) or WebSocket isn't
+  // available (some restrictive environments).
+  if (!liveConnected && st.live_ws_port && window.connectLive) {
+    liveConnected = true;
+    try { window.connectLive(st.live_ws_port); } catch (e) { console.warn("live co-editing unavailable:", e); }
+  }
 }
 
 async function loadLog() {
