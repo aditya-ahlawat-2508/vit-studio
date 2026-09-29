@@ -57,7 +57,7 @@ $("importInput").addEventListener("change", async (ev) => {
     S.library = S.library.filter((s) => s.ref !== entry.ref).concat(entry);
     S.lib[entry.ref] = entry;
     renderBin();
-    toast(`${file.name} is in the media bin. Only its checksum will go into git.`);
+    toast(`${file.name} is in the media bin. Only a small reference to it is saved with your project.`);
   } catch (e) {
     toast(e.message, true);
   } finally {

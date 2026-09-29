@@ -21,7 +21,7 @@ async function openCommit(c) {
   try {
     const { diff } = await api(`/api/commit?ref=${c.hash}`);
     openModal(`${c.message.replace(/^vit:\s*/, "")}  ·  ${c.hash}`,
-      h("div", { class: "muted" }, `${c.author} · ${c.date}${c.parents.length > 1 ? " · merge commit (2 parents)" : ""}`),
+      h("div", { class: "muted" }, `${c.author} · ${c.date}${c.parents.length > 1 ? " · combined from two version lines" : ""}`),
       h("h3", {}, c.parents.length ? "What this version changed" : "Initial snapshot"),
       diffBox(diff),
       h("div", { class: "modal-actions" },

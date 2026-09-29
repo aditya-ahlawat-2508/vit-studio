@@ -21,7 +21,7 @@ function diffLines(text, target) {
 }
 
 function renderVC() {
-  $("branchPill").textContent = S.detached ? "detached HEAD" : S.branch;
+  $("branchPill").textContent = S.detached ? LABELS.detached : S.branch;
   $("dirtyPill").hidden = !S.dirty;
   $("branchSelect").replaceChildren(...S.branches.map((b) => h("option", { value: b, selected: b === S.branch }, b)));
 

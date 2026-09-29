@@ -8,9 +8,9 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="brand"><span class="logo">vit</span><span class="brand-sub">git for video editing</span></div>
+  <div class="brand"><span class="logo">vit</span><span class="brand-sub">video editing with full history</span></div>
   <div class="topbar-mid">
-    <span class="branch-pill" id="branchPill" title="Current branch">main</span>
+    <span class="branch-pill" id="branchPill" title="Current version line">main</span>
     <span class="dirty-pill" id="dirtyPill" hidden>unsaved changes</span>
   </div>
   <div class="topbar-right">
@@ -31,7 +31,7 @@
           Import video<input type="file" id="importInput" accept="video/*" hidden>
         </label>
       </div>
-      <p class="hint">Drag onto the timeline, or double-click to add at the playhead. Media never enters git — only references to its frames do.</p>
+      <p class="hint">Drag onto the timeline, or double-click to add at the playhead. Your original video files stay on your computer — only small references to them are saved with your project.</p>
       <div class="bin-list" id="binList"></div>
     </section>
     <section class="panel inspector">
@@ -44,7 +44,7 @@
   <section class="col center">
     <div class="center-tabs">
       <button class="tab active" data-view="viewer">Viewer</button>
-      <button class="tab" data-view="json">JSON on disk</button>
+      <button class="tab" data-view="json">Project files (advanced)</button>
     </div>
     <div class="viewer-wrap" id="viewerWrap">
       <div class="preview-banner" id="previewBanner" hidden>
@@ -62,7 +62,7 @@
       <div class="json-files" id="jsonFiles"></div>
       <div class="json-panes">
         <div class="json-pane"><h3>File contents</h3><pre id="jsonContent"></pre></div>
-        <div class="json-pane"><h3>git diff vs. last saved version</h3><pre id="jsonDiff" class="rawdiff"></pre></div>
+        <div class="json-pane"><h3>What changed since last save</h3><pre id="jsonDiff" class="rawdiff"></pre></div>
       </div>
     </div>
 
@@ -87,14 +87,14 @@
   <!-- Right: version control -->
   <aside class="col right">
     <section class="panel vc">
-      <div class="panel-head"><h2>Branches</h2></div>
+      <div class="panel-head"><h2>Version lines</h2></div>
       <div class="branch-row">
-        <select id="branchSelect" title="Switch branch"></select>
-        <button class="small" id="newBranchBtn">New branch</button>
-        <button class="small accent" id="mergeBtn">Merge…</button>
+        <select id="branchSelect" title="Switch to a version line"></select>
+        <button class="small" id="newBranchBtn">New version line</button>
+        <button class="small accent" id="mergeBtn">Combine…</button>
       </div>
       <form class="new-branch" id="newBranchForm" hidden>
-        <input id="newBranchName" placeholder="e.g. priya-color" autocomplete="off">
+        <input id="newBranchName" placeholder="e.g. priya's color pass" autocomplete="off">
         <button class="small accent" type="submit">Create</button>
         <button class="small ghost" type="button" id="newBranchCancel">Cancel</button>
       </form>
@@ -128,6 +128,7 @@
 
 <!-- Classic scripts sharing one global scope; order matters (main.js wires events and boots). -->
 <script src="/js/sources.js"></script>
+<script src="/js/labels.js"></script>
 <script src="/js/core.js"></script>
 <script src="/js/model.js"></script>
 <script src="/js/sync.js"></script>

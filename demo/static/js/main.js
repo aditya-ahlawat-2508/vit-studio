@@ -36,7 +36,7 @@ async function loadLog() {
 function render() {
   const pv = S.preview;
   $("previewBanner").hidden = !pv;
-  if (pv) $("previewLabel").textContent = `Previewing ${pv.ref} — “${pv.label}” (read-only)`;
+  if (pv) $("previewLabel").textContent = `Looking at an older version — “${pv.label}” (view only)`;
   renderTimeline();
   renderViewer();
   renderInspector();
@@ -85,7 +85,7 @@ $("branchSelect").addEventListener("change", async (ev) => {
     const r = await api("/api/checkout", { ref, author: author() });
     S.preview = null;
     await loadAll();
-    toast(r.autosaved ? `Auto-saved your changes (${r.autosaved}), then switched to ${ref}.` : `Switched to ${ref}. The timeline was rebuilt from its JSON.`);
+    toast(r.autosaved ? `Auto-saved your changes (${r.autosaved}), then switched to ${ref}.` : `Switched to ${ref}.`);
   } catch (e) { toast(e.message, true); renderVC(); }
 });
 
@@ -110,7 +110,7 @@ $("mergeBtn").addEventListener("click", async () => { await flushSync(); openMer
 
 $("resetBtn").addEventListener("click", () => {
   openModal("Reset the demo?",
-    h("p", {}, "This deletes the demo git repository (all branches and versions) and starts again from the starter timeline. Imported media stays in the media bin."),
+    h("p", {}, "This deletes all version lines and saved versions in this demo and starts again from the starter timeline. Imported media stays in the media bin."),
     h("div", { class: "modal-actions" },
       h("button", { class: "ghost", onclick: closeModal }, "Cancel"),
       h("button", { class: "accent", onclick: async () => {

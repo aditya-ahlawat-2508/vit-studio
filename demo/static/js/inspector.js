@@ -58,7 +58,7 @@ function renderInspector() {
   const sel = S.selected;
   const files = view();
   if (!sel) {
-    box.replaceChildren(h("p", { class: "empty" }, "Select a clip or marker on the timeline. Every control here edits one of the JSON files vit tracks — the small label on each group shows which."));
+    box.replaceChildren(h("p", { class: "empty" }, "Select a clip or marker on the timeline to edit it."));
     return;
   }
   if (sel.type === "marker") {
@@ -67,7 +67,6 @@ function renderInspector() {
     const ro = readonly();
     box.replaceChildren(
       h("div", { class: "insp-title" }, `Marker at ${tc(m.frame)}`),
-      h("div", { class: "insp-sub" }, "markers.json"),
       h("div", { class: "field text" }, h("label", {}, "Name"),
         h("input", { value: m.name, disabled: ro, oninput: (ev) => liveEdit(() => { m.name = ev.target.value; }) })),
       h("div", { class: "field text" }, h("label", {}, "Note"),
@@ -86,11 +85,14 @@ function renderInspector() {
   const c = findClip(sel.id, files);
   if (!c) { S.selected = null; return renderInspector(); }
   if (readonly()) {
+    const skip = new Set(["id", "media_ref"]);
     box.replaceChildren(
       h("div", { class: "insp-title" }, c.name),
-      h("div", { class: "insp-sub" }, c.id),
-      h("p", { class: "empty" }, "Read-only preview of an older version."),
-      h("pre", { class: "diff" }, JSON.stringify(c, null, 2)));
+      h("p", { class: "empty" }, "Viewing an older version — read only."),
+      ...Object.entries(c).filter(([k]) => !skip.has(k)).map(([k, v]) =>
+        h("div", { class: "field text" },
+          h("label", {}, describeField(k) || k),
+          h("span", {}, formatConflictValue(v, { path: `_/${k}` })))));
     return;
   }
   const t = c.transform || (c.transform = { Pan: 0, Tilt: 0, ZoomX: 1, ZoomY: 1, Opacity: 100 });
@@ -113,7 +115,7 @@ function renderInspector() {
     h("div", { class: "insp-sub" }, `${c.id}  ·  source ${c.source_start_frame}–${c.source_end_frame} of ${src ? src.duration_frames : "?"}`),
 
     h("div", { class: "insp-group" },
-      h("h3", {}, "Edit", h("span", { class: "domain-tag" }, "cuts.json")),
+      h("h3", {}, "Edit"),
       slider("Zoom", t.ZoomX ?? 1, 0.5, 3, 0.01, (v) => v.toFixed(2), (v) => liveEdit(() => { t.ZoomX = round3(v); t.ZoomY = round3(v); })),
       slider("Pan", t.Pan || 0, -960, 960, 1, String, (v) => liveEdit(() => { t.Pan = v; })),
       slider("Tilt", t.Tilt || 0, -540, 540, 1, String, (v) => liveEdit(() => { t.Tilt = v; })),
@@ -128,7 +130,7 @@ function renderInspector() {
     ),
 
     h("div", { class: "insp-group" },
-      h("h3", {}, "Color", h("span", { class: "domain-tag" }, "color.json")),
+      h("h3", {}, "Color"),
       h("div", { class: "presets" }, Object.entries(GRADE_PRESETS).map(([name, vals]) => h("button", {
         class: "small ghost",
         onclick: () => { edit(() => Object.entries(vals).forEach(([k, v]) => setGrade(c.id, k, v))); renderInspector(); },
@@ -137,7 +139,7 @@ function renderInspector() {
     ),
 
     h("div", { class: "insp-group" },
-      h("h3", {}, "Effects", h("span", { class: "domain-tag" }, "effects.json")),
+      h("h3", {}, "Effects"),
       slider("Blur", fx.blur || 0, 0, 20, 0.5, (v) => `${v}px`, (v) => liveEdit(() => setEffect(c.id, "blur", v, v === 0))),
       slider("Vignette", fx.vignette || 0, 0, 1, 0.05, (v) => v.toFixed(2), (v) => liveEdit(() => setEffect(c.id, "vignette", round3(v), v === 0))),
       slider("Fade in", fx.fade_in || 0, 0, 48, 1, (v) => `${v}f`, (v) => liveEdit(() => setEffect(c.id, "fade_in", v, v === 0))),
@@ -145,7 +147,7 @@ function renderInspector() {
     ),
 
     a ? h("div", { class: "insp-group" },
-      h("h3", {}, "Audio", h("span", { class: "domain-tag" }, "audio.json")),
+      h("h3", {}, "Audio"),
       slider("Volume", a.volume, -40, 12, 0.5, (v) => `${v > 0 ? "+" : ""}${v} dB`, (v) => liveEdit(() => { a.volume = v; })),
       slider("Pan", a.pan, -100, 100, 1, String, (v) => liveEdit(() => { a.pan = v; })),
     ) : null,
