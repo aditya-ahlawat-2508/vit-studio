@@ -88,8 +88,32 @@ def _overlap_conflicts(merged_cuts: dict, fps: float) -> List[Conflict]:
     return conflicts
 
 
-def _apply_overlap_resolution(cuts: dict, conflict: Conflict, choice: dict) -> None:
-    """Mutate `cuts` in place per the chosen resolution for one overlap conflict.
+def _ripple_linked_audio(audio: dict, media_ref: object, old_start: int, old_end: int, gap_start: int) -> None:
+    """Keep audio in sync with a video clip's keep-both reposition.
+
+    The moved clip's own linked audio (same media_ref, still at its old
+    frame range) follows it to the new position; every other audio clip
+    already at/after the insertion point ripples forward by the same
+    duration — mirroring the video-track ripple in `_apply_overlap_resolution`
+    so a keep-both resolution doesn't leave audio/video sync for
+    `vit/validation.py` to merely flag after the fact.
+    """
+    duration = old_end - old_start
+    for a_track in audio.get("audio_tracks", []):
+        for a_item in a_track.get("items", []):
+            if (a_item.get("media_ref") == media_ref
+                    and a_item.get("start_frame") == old_start
+                    and a_item.get("end_frame") == old_end):
+                a_item["start_frame"] = gap_start
+                a_item["end_frame"] = gap_start + duration
+            elif a_item.get("start_frame", 0) >= gap_start:
+                a_item["start_frame"] += duration
+                a_item["end_frame"] += duration
+
+
+def _apply_overlap_resolution(cuts: dict, audio: dict, conflict: Conflict, choice: dict) -> None:
+    """Mutate `cuts` (and, for keep_both, `audio`) in place per the chosen
+    resolution for one overlap conflict.
 
     Both clips are already fully present in the merge, so there's nothing to
     "pick" the way a field conflict does — only how to arrange (or drop) them.
@@ -109,7 +133,8 @@ def _apply_overlap_resolution(cuts: dict, conflict: Conflict, choice: dict) -> N
         first_id, second_id = (a_id, b_id) if order == "a_first" else (b_id, a_id)
         first = next(i for i in track["items"] if i.get("id") == first_id)
         second = next(i for i in track["items"] if i.get("id") == second_id)
-        duration = second["record_end_frame"] - second["record_start_frame"]
+        old_second_start, old_second_end = second["record_start_frame"], second["record_end_frame"]
+        duration = old_second_end - old_second_start
         gap_start = first["record_end_frame"]
         second["record_start_frame"] = gap_start
         second["record_end_frame"] = gap_start + duration
@@ -119,6 +144,7 @@ def _apply_overlap_resolution(cuts: dict, conflict: Conflict, choice: dict) -> N
             if item.get("record_start_frame", 0) >= gap_start:
                 item["record_start_frame"] += duration
                 item["record_end_frame"] += duration
+        _ripple_linked_audio(audio, second.get("media_ref"), old_second_start, old_second_end, gap_start)
     elif op == "keep_both_new_track":
         order = choice.get("order", "a_first")
         move_id = b_id if order == "a_first" else a_id
@@ -135,12 +161,13 @@ def _apply_overlap_resolution(cuts: dict, conflict: Conflict, choice: dict) -> N
 def _resolve_overlaps(merged_files: DomainFiles, resolutions: Dict[str, object], fps: float) -> List[Conflict]:
     """Apply any overlap resolutions the caller already supplied; return what's left."""
     cuts = merged_files.get("cuts", {})
+    audio = merged_files.get("audio", {})
     conflicts = _overlap_conflicts(cuts, fps)
     remaining = []
     for c in conflicts:
         choice = resolutions.get(c["path"])
         if isinstance(choice, dict) and choice.get("op") in ("keep_a", "keep_b", "keep_both", "keep_both_new_track"):
-            _apply_overlap_resolution(cuts, c, choice)
+            _apply_overlap_resolution(cuts, audio, c, choice)
         else:
             remaining.append(c)
     return remaining

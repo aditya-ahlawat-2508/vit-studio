@@ -13,7 +13,7 @@ import pytest
 from tests.helpers import clip, clip_ids, commit_all, write_cuts
 from vit.merge import CONFLICTS, MERGED, perform_merge, preview_merge
 from vit.merge.service import TIMELINE_OVERLAP
-from vit.timeline import read_json
+from vit.timeline import read_json, write_json
 
 
 def _diverge(project, ours_items, theirs_items):
@@ -89,6 +89,57 @@ def test_keep_both_back_to_back_resolution_ripples_the_track(project):
     # "later" started at 504 (>= the insertion point) -> rippled forward by 120 frames.
     assert items["later"]["record_start_frame"] == 624
     assert items["later"]["record_end_frame"] == 672
+
+
+def _audio_clip(clip_id, media_ref, start, length=120):
+    return {"id": clip_id, "media_ref": media_ref, "start_frame": start, "end_frame": start + length,
+            "volume": 0.0, "pan": 0.0}
+
+
+def test_keep_both_back_to_back_ripples_linked_audio_to_stay_in_sync(project):
+    """Regression test for the reported bug: choosing "keep both" for an
+    overlap conflict rippled the VIDEO track correctly but left each clip's
+    own linked audio behind at its old position — video and audio fell out
+    of sync exactly where the app's own validation would then complain about
+    it. Audio must follow its video clip to the new position, and any other
+    audio clip already past the insertion point must ripple too, same as
+    the video track does."""
+    sunset = clip("sunset_beach", 384, length=120, media_ref="sha256:sunset")
+    forest = clip("forest_drone", 384, length=120, media_ref="sha256:forest")
+    later = clip("later", 504, length=48, media_ref="sha256:later")
+    _diverge(project, [clip("a", 0), sunset, later], [clip("a", 0), forest])
+
+    # Linked audio for every clip, at exactly its video's original position —
+    # written on top of whichever branch ends up "ours" after checkout below.
+    write_json(project.store.path("audio"), {"audio_tracks": [{"index": 1, "items": [
+        _audio_clip("a_sunset", "sha256:sunset", 384, 120),
+        _audio_clip("a_later", "sha256:later", 504, 48),
+    ]}]})
+    commit_all(project, "audio for adi's clips")
+
+    outcome = perform_merge(project, "anu_codes")
+    conflict = outcome.conflicts[0]
+    path = conflict["path"]
+    a_id, b_id = conflict["clip_a"]["id"], conflict["clip_b"]["id"]
+    order = "a_first" if a_id == "sunset_beach" else "b_first"
+
+    outcome = perform_merge(project, "anu_codes", {path: {"op": "keep_both", "order": order}})
+    assert outcome.status == MERGED
+
+    cuts = read_json(project.store.path("cuts"))
+    video = {i["id"]: i for t in cuts["video_tracks"] for i in t["items"]}
+    audio = read_json(project.store.path("audio"))
+    sound = {i["id"]: i for t in audio["audio_tracks"] for i in t["items"]}
+
+    # sunset stayed put (first); forest followed it to 504-624 (second);
+    # "later" (unrelated video, further down the track) rippled to 624-672.
+    assert (video["sunset_beach"]["record_start_frame"], video["sunset_beach"]["record_end_frame"]) == (384, 504)
+    assert (video["forest_drone"]["record_start_frame"], video["forest_drone"]["record_end_frame"]) == (504, 624)
+    assert (video["later"]["record_start_frame"], video["later"]["record_end_frame"]) == (624, 672)
+
+    # Audio follows its own video exactly — sync preserved, not just flagged.
+    assert (sound["a_sunset"]["start_frame"], sound["a_sunset"]["end_frame"]) == (384, 504)
+    assert (sound["a_later"]["start_frame"], sound["a_later"]["end_frame"]) == (624, 672)
 
 
 def test_keep_both_new_track_resolution_moves_the_second_clip(project):
